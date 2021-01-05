@@ -6,6 +6,8 @@
 #include "trace.h"
 #include "util.h"
 
+#include <common/logger/logger.h>
+
 #include <filesystem>
 #include <optional>
 #include <utility>
@@ -485,7 +487,7 @@ namespace JSONHelpers
     {
         try
         {
-            std::unordered_map<std::wstring, FancyZonesDataTypes::DeviceInfoData> appliedZonesets;
+            TDeviceInfoMap appliedZonesets;
 
             auto zonesets = json.GetNamedArray(NonLocalizable::AppliedZonesets);
             for (const auto& zoneset : zonesets)
@@ -530,17 +532,10 @@ namespace JSONHelpers
         }
     }
 
-    void SaveFancyZonesData(const std::wstring& zonesSettingsFileName,
-                            const std::wstring& appZoneHistoryFileName,
-                            const TDeviceInfoMap& deviceInfoMap,
-                            const TCustomZoneSetsMap& customZoneSetsMap,
-                            const TAppZoneHistoryMap& appZoneHistoryMap)
-
+    void SaveZoneSettings(const std::wstring& zonesSettingsFileName, const TDeviceInfoMap& deviceInfoMap, const TCustomZoneSetsMap& customZoneSetsMap)
     {
         json::JsonObject root{};
-        json::JsonObject appZoneHistoryRoot{};
 
-        appZoneHistoryRoot.SetNamedValue(NonLocalizable::AppZoneHistoryStr, JSONHelpers::SerializeAppZoneHistory(appZoneHistoryMap));
         root.SetNamedValue(NonLocalizable::DevicesStr, JSONHelpers::SerializeDeviceInfos(deviceInfoMap));
         root.SetNamedValue(NonLocalizable::CustomZoneSetsStr, JSONHelpers::SerializeCustomZoneSets(customZoneSetsMap));
 
@@ -548,10 +543,21 @@ namespace JSONHelpers
         if (!before.has_value() || before.value().Stringify() != root.Stringify())
         {
             Trace::FancyZones::DataChanged();
+            json::to_file(zonesSettingsFileName, root);
         }
+    }
 
-        json::to_file(zonesSettingsFileName, root);
-        json::to_file(appZoneHistoryFileName, appZoneHistoryRoot);
+    void SaveAppZoneHistory(const std::wstring& appZoneHistoryFileName, const TAppZoneHistoryMap& appZoneHistoryMap)
+    {
+        json::JsonObject root{};
+
+        root.SetNamedValue(NonLocalizable::AppZoneHistoryStr, JSONHelpers::SerializeAppZoneHistory(appZoneHistoryMap));
+
+        auto before = json::from_file(appZoneHistoryFileName);
+        if (!before.has_value() || before.value().Stringify() != root.Stringify())
+        {
+            json::to_file(appZoneHistoryFileName, root);
+        }
     }
 
     TAppZoneHistoryMap ParseAppZoneHistory(const json::JsonObject& fancyZonesDataJSON)
@@ -691,6 +697,10 @@ namespace JSONHelpers
                 {
                     result = std::move(deviceInfo);
                 }
+                else
+                {
+                    Logger::trace(L"ParseDeviceInfoFromTmpFile: AppliedZonesetsJSON::FromJson parsing error, {}", zoneSetJson.value().Stringify());
+                }
             }
         }
 
@@ -714,11 +724,16 @@ namespace JSONHelpers
                         {
                             result.emplace_back(std::move(*customZoneSet));
                         }
+                        else
+                        {
+                            Logger::trace(L"ParseCustomZoneSetsFromTmpFile: CustomZoneSetJSON::FromJson parsing error, {}", zoneSet.GetObjectW().Stringify());
+                        }
                     }
                 }
             }
-            catch (const winrt::hresult_error&)
+            catch (const winrt::hresult_error& err)
             {
+                Logger::trace(L"ParseCustomZoneSetsFromTmpFile: CustomZoneSetJSON::FromJson parsing error, {}", err.message());
             }
 
             DeleteTmpFile(tmpFilePath);

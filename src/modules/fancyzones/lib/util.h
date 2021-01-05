@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gdiplus.h"
-#include <common/string_utils.h>
+#include <common/utils/string_utils.h>
 
 namespace FancyZonesDataTypes
 {
@@ -94,7 +94,7 @@ namespace FancyZonesUtils
     inline COLORREF HexToRGB(std::wstring_view hex, const COLORREF fallbackColor = RGB(255, 255, 255))
     {
         hex = left_trim<wchar_t>(trim<wchar_t>(hex), L"#");
-        
+
         try
         {
             const long long tmp = std::stoll(hex.data(), nullptr, 16);
@@ -184,6 +184,8 @@ namespace FancyZonesUtils
         return result;
     }
 
+    std::wstring GetDisplayDeviceId(const std::wstring& device, std::unordered_map<std::wstring, DWORD>& displayDeviceIdxMap);
+
     UINT GetDpiForMonitor(HMONITOR monitor) noexcept;
     void OrderMonitors(std::vector<std::pair<HMONITOR, RECT>>& monitorInfo);
     void SizeWindowToRect(HWND window, RECT rect) noexcept;
@@ -202,7 +204,6 @@ namespace FancyZonesUtils
 
     std::wstring GenerateUniqueId(HMONITOR monitor, const std::wstring& devideId, const std::wstring& virtualDesktopId);
     std::wstring GenerateUniqueIdAllMonitorsArea(const std::wstring& virtualDesktopId);
-    std::optional<std::wstring> GenerateMonitorId(MONITORINFOEX mi, HMONITOR monitor, const GUID& virtualDesktopId);
 
     std::wstring TrimDeviceId(const std::wstring& deviceId);
     std::optional<FancyZonesDataTypes::DeviceIdData> ParseDeviceId(const std::wstring& deviceId);
@@ -210,4 +211,7 @@ namespace FancyZonesUtils
 
     RECT PrepareRectForCycling(RECT windowRect, RECT zoneWindowRect, DWORD vkCode) noexcept;
     size_t ChooseNextZoneByPosition(DWORD vkCode, RECT windowRect, const std::vector<RECT>& zoneRects) noexcept;
+
+    // If HWND is already dead, we assume it wasn't elevated
+    bool IsProcessOfWindowElevated(HWND window);
 }

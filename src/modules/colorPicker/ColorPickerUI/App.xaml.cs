@@ -5,10 +5,9 @@
 using System;
 using System.Threading;
 using System.Windows;
-using ColorPicker;
-using ColorPicker.Helpers;
 using ColorPicker.Mouse;
 using ManagedCommon;
+using Microsoft.PowerToys.Common.UI;
 
 namespace ColorPickerUI
 {
@@ -23,30 +22,10 @@ namespace ColorPickerUI
         private bool disposedValue;
         private ThemeManager _themeManager;
 
-        [STAThread]
-        public static void Main(string[] args)
-        {
-            _args = args;
-            AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
-            try
-            {
-                using (var application = new App())
-                {
-                    application.InitializeComponent();
-                    application.Run();
-                }
-            }
-#pragma warning disable CA1031 // Do not catch general exception types
-            catch (Exception ex)
-#pragma warning restore CA1031 // Do not catch general exception types
-            {
-                Logger.LogError("Unhandled exception", ex);
-                CursorManager.RestoreOriginalCursors();
-            }
-        }
-
         protected override void OnStartup(StartupEventArgs e)
         {
+            _args = e?.Args;
+
             // allow only one instance of color picker
             _instanceMutex = new Mutex(true, @"Global\ColorPicker", out bool createdNew);
             if (!createdNew)
@@ -56,7 +35,7 @@ namespace ColorPickerUI
                 return;
             }
 
-            if (_args.Length > 0)
+            if (_args?.Length > 0)
             {
                 _ = int.TryParse(_args[0], out _powerToysPid);
             }
@@ -79,12 +58,6 @@ namespace ColorPickerUI
 
             CursorManager.RestoreOriginalCursors();
             base.OnExit(e);
-        }
-
-        private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
-        {
-            Logger.LogError("Unhandled exception", (e.ExceptionObject is Exception) ? (e.ExceptionObject as Exception) : new Exception());
-            CursorManager.RestoreOriginalCursors();
         }
 
         protected virtual void Dispose(bool disposing)

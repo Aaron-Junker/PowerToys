@@ -5,16 +5,14 @@
 #include "XamlBridge.h"
 #include <keyboardmanager/common/trace.h>
 #include <keyboardmanager/common/KeyboardManagerConstants.h>
-#include <common/windows_colors.h>
-#include <common/dpi_aware.h>
+#include <common/themes/windows_colors.h>
+#include <common/display/dpi_aware.h>
 #include "Styles.h"
 #include "Dialog.h"
 #include <keyboardmanager/dll/Generated Files/resource.h>
 #include <keyboardmanager/common/KeyboardManagerState.h>
-#include "common/common.h"
 #include "LoadingAndSavingRemappingHelper.h"
 #include "UIHelpers.h"
-extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 using namespace winrt::Windows::Foundation;
 
@@ -77,9 +75,9 @@ void createEditShortcutsWindow(HINSTANCE hInst, KeyboardManagerState& keyboardMa
         isEditShortcutsWindowRegistrationCompleted = true;
     }
 
-    // Find center screen coordinates
-    RECT desktopRect;
-    GetClientRect(GetDesktopWindow(), &desktopRect);
+    // Find coordinates of the screen where the settings window is placed.
+    RECT desktopRect = UIHelpers::GetForegroundWindowDesktopRect();
+
     // Calculate DPI dependent window size
     int windowWidth = KeyboardManagerConstants::DefaultEditShortcutsWindowWidth;
     int windowHeight = KeyboardManagerConstants::DefaultEditShortcutsWindowHeight;
@@ -90,8 +88,8 @@ void createEditShortcutsWindow(HINSTANCE hInst, KeyboardManagerState& keyboardMa
         szWindowClass,
         GET_RESOURCE_STRING(IDS_EDITSHORTCUTS_WINDOWNAME).c_str(),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MAXIMIZEBOX,
-        (desktopRect.right / 2) - (windowWidth / 2),
-        (desktopRect.bottom / 2) - (windowHeight / 2),
+        ((desktopRect.right + desktopRect.left) / 2) - (windowWidth / 2),
+        ((desktopRect.bottom + desktopRect.top) / 2) - (windowHeight / 2),
         windowWidth,
         windowHeight,
         NULL,

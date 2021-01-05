@@ -1,8 +1,8 @@
 #include "pch.h"
-#include <common/settings_objects.h>
-#include <common/common.h>
+
+#include <common/SettingsAPI/settings_objects.h>
 #include <common/debug_control.h>
-#include <common/LowlevelKeyboardEvent.h>
+#include <common/hooks/LowlevelKeyboardEvent.h>
 #include <interface/powertoy_module_interface.h>
 #include <lib/ZoneSet.h>
 
@@ -14,8 +14,9 @@
 #include <lib/FancyZonesWinHookEventIDs.h>
 #include <lib/FancyZonesData.cpp>
 #include <common/logger/logger.h>
-
-extern "C" IMAGE_DOS_HEADER __ImageBase;
+#include <common/utils/resources.h>
+#include <common/utils/winapi_error.h>
+#include <common/utils/window.h>
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
@@ -209,11 +210,11 @@ private:
     //contains the non localized key of the powertoy
     std::wstring app_key;
 
-    static inline FancyZonesModule* s_instance;
-    static inline HHOOK s_llKeyboardHook;
+    static inline FancyZonesModule* s_instance = nullptr;
+    static inline HHOOK s_llKeyboardHook = nullptr;
 
     std::vector<HWINEVENTHOOK> m_staticWinEventHooks;
-    HWINEVENTHOOK m_objectLocationWinEventHook;
+    HWINEVENTHOOK m_objectLocationWinEventHook = nullptr;
 
     static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
     {

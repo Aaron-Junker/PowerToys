@@ -1,8 +1,6 @@
 #include "pch.h"
 
-#include <common/common.h>
 #include <common/logger/logger.h>
-#include <common/on_thread_executor.h>
 
 #include "FancyZonesData.h"
 #include "FancyZonesDataTypes.h"
@@ -10,6 +8,7 @@
 #include "ZoneWindowDrawing.h"
 #include "trace.h"
 #include "util.h"
+#include "on_thread_executor.h"
 #include "Settings.h"
 
 #include <ShellScalingApi.h>
@@ -121,8 +120,7 @@ bool ZoneWindow::Init(IZoneWindowHost* host, HINSTANCE hinstance, HMONITOR monit
         {
             return false;
         }
-        const UINT dpi = GetDpiForMonitor(m_monitor);
-        workAreaRect = Rect(mi.rcWork, dpi);
+        workAreaRect = Rect(mi.rcWork);
     }
     else
     {
@@ -142,6 +140,9 @@ bool ZoneWindow::Init(IZoneWindowHost* host, HINSTANCE hinstance, HMONITOR monit
     }
 
     MakeWindowTransparent(m_window.get());
+    // According to ShowWindow docs, we must call it with SW_SHOWNORMAL the first time
+    ShowWindow(m_window.get(), SW_SHOWNORMAL);
+    ShowWindow(m_window.get(), SW_HIDE);
 
     m_zoneWindowDrawing = std::make_unique<ZoneWindowDrawing>(m_window.get());
 
@@ -197,7 +198,7 @@ IFACEMETHODIMP ZoneWindow::MoveSizeUpdate(POINT const& ptScreen, bool dragEnable
     {
         m_zoneWindowDrawing->DrawActiveZoneSet(m_activeZoneSet->GetZones(), m_highlightZone, m_host);
     }
-    
+
     return S_OK;
 }
 
@@ -319,11 +320,9 @@ ZoneWindow::SaveWindowProcessToZoneIndex(HWND window) noexcept
 IFACEMETHODIMP_(void)
 ZoneWindow::ShowZoneWindow() noexcept
 {
-    Logger::trace("ShowZoneWindow: Enter");
     auto window = m_window.get();
     if (!window)
     {
-        Logger::trace("ShowZoneWindow: no window");
         return;
     }
 
@@ -345,15 +344,10 @@ ZoneWindow::HideZoneWindow() noexcept
 {
     if (m_window)
     {
-        Logger::trace("HideZoneWindow: hiding");
         m_zoneWindowDrawing->Hide();
         m_keyLast = 0;
         m_windowMoveSize = nullptr;
         m_highlightZone = {};
-    }
-    else
-    {
-        Logger::trace("HideZoneWindow: no window");
     }
 }
 

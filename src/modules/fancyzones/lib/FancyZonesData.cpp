@@ -5,8 +5,7 @@
 #include "ZoneSet.h"
 #include "Settings.h"
 
-#include <common/common.h>
-#include <common/json.h>
+#include <common/utils/json.h>
 
 #include <shlwapi.h>
 #include <filesystem>
@@ -15,6 +14,7 @@
 #include <regex>
 #include <sstream>
 #include <unordered_set>
+#include <common/utils/process_path.h>
 
 // Non-localizable strings
 namespace NonLocalizable
@@ -553,11 +553,20 @@ void FancyZonesData::LoadFancyZonesData()
 void FancyZonesData::SaveFancyZonesData() const
 {
     std::scoped_lock lock{ dataLock };
-    JSONHelpers::SaveFancyZonesData(zonesSettingsFileName,
-                                    appZoneHistoryFileName,
-                                    deviceInfoMap,
-                                    customZoneSetsMap,
-                                    appZoneHistoryMap);
+    JSONHelpers::SaveZoneSettings(zonesSettingsFileName, deviceInfoMap, customZoneSetsMap);
+    JSONHelpers::SaveAppZoneHistory(appZoneHistoryFileName, appZoneHistoryMap);
+}
+
+void FancyZonesData::SaveZoneSettings() const
+{
+    std::scoped_lock lock{ dataLock };
+    JSONHelpers::SaveZoneSettings(zonesSettingsFileName, deviceInfoMap, customZoneSetsMap);
+}
+
+void FancyZonesData::SaveAppZoneHistory() const
+{
+    std::scoped_lock lock{ dataLock };
+    JSONHelpers::SaveAppZoneHistory(appZoneHistoryFileName, appZoneHistoryMap);
 }
 
 void FancyZonesData::RemoveDesktopAppZoneHistory(const std::wstring& desktopId)

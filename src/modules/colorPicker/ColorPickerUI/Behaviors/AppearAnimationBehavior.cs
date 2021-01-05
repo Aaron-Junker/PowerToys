@@ -4,8 +4,8 @@
 
 using System;
 using System.Windows;
-using System.Windows.Interactivity;
 using System.Windows.Media.Animation;
+using Microsoft.Xaml.Behaviors;
 
 namespace ColorPicker.Behaviors
 {
@@ -45,6 +45,10 @@ namespace ColorPicker.Behaviors
             };
 
             AssociatedObject.BeginAnimation(UIElement.OpacityProperty, opacityAppear);
+
+            // force re-evaluation of tooltip size
+            AssociatedObject.SizeToContent = SizeToContent.Manual;
+            AssociatedObject.SizeToContent = SizeToContent.WidthAndHeight;
         }
 
         private void Hide()

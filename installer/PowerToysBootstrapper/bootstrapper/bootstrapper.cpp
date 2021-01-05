@@ -1,19 +1,21 @@
 #include "pch.h"
 #include "Generated Files/resource.h"
 
-#include <common/common.h>
-#include <common/RcResource.h>
+#include "RcResource.h"
 #include <common/updating/dotnet_installation.h>
 #include <common/updating/installer.h>
-#include <common/version.h>
-#include <common/appMutex.h>
-#include <common/processApi.h>
+#include <common/updating/notifications.h>
+#include <common/version/version.h>
+#include <common/utils/appMutex.h>
+#include <common/utils/elevation.h>
+#include <common/utils/processApi.h>
+#include <common/utils/resources.h>
+#include <common/utils/window.h>
+#include <common/utils/winapi_error.h>
 
 #include <runner/action_runner_utils.h>
 
 #include "progressbar_window.h"
-
-extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 auto Strings = create_notifications_strings();
 
@@ -34,14 +36,14 @@ namespace // Strings in this namespace should not be localized
 
 namespace fs = std::filesystem;
 
-std::optional<fs::path> extractEmbeddedInstaller()
+std::optional<fs::path> extractEmbeddedInstaller(const fs::path extractPath)
 {
     auto executableRes = RcResource::create(IDR_BIN_MSIINSTALLER, L"BIN");
     if (!executableRes)
     {
         return std::nullopt;
     }
-    auto installerPath = fs::temp_directory_path() / L"PowerToysBootstrappedInstaller-" PRODUCT_VERSION_STRING L".msi";
+    auto installerPath = extractPath / L"PowerToysBootstrappedInstaller-" PRODUCT_VERSION_STRING L".msi";
     return executableRes->saveAsFile(installerPath) ? std::make_optional(std::move(installerPath)) : std::nullopt;
 }
 
@@ -85,6 +87,14 @@ void show_error_box(const wchar_t* message, const wchar_t* title)
 int bootstrapper(HINSTANCE hInstance)
 {
     winrt::init_apartment();
+    char* programFilesDir = nullptr;
+    size_t size = 0;
+    std::string defaultInstallDir;
+    if (!_dupenv_s(&programFilesDir, &size, "PROGRAMFILES"))
+    {
+        defaultInstallDir += programFilesDir;
+        defaultInstallDir += "\\PowerToys";
+    }
     cxxopts::Options options{ "PowerToysBootstrapper" };
     // clang-format off
     options.add_options()
@@ -94,7 +104,9 @@ int bootstrapper(HINSTANCE hInstance)
         ("no_start_pt", "Do not launch PowerToys after the installation is complete")
         ("skip_dotnet_install", "Skip dotnet 3.X installation even if it's not detected")
         ("log_level", "Log level. Possible values: off|debug|error", cxxopts::value<std::string>()->default_value("off"))
-        ("log_dir", "Log directory.", cxxopts::value<std::string>()->default_value("."));
+        ("log_dir", "Log directory", cxxopts::value<std::string>()->default_value("."))
+        ("install_dir", "Installation directory", cxxopts::value<std::string>()->default_value(defaultInstallDir))
+        ("extract_msi", "Extract MSI to the working directory and exit. Use only if you must access MSI directly.");
     // clang-format on
     cxxopts::ParseResult cmdArgs;
     bool showHelp = false;
@@ -115,13 +127,35 @@ int bootstrapper(HINSTANCE hInstance)
         MessageBoxA(nullptr, helpMsg.str().c_str(), "Help", MB_OK | MB_ICONINFORMATION);
         return 0;
     }
+
     const bool noFullUI = cmdArgs["no_full_ui"].as<bool>();
     const bool silent = cmdArgs["silent"].as<bool>();
     const bool skipDotnetInstall = cmdArgs["skip_dotnet_install"].as<bool>();
     const bool noStartPT = cmdArgs["no_start_pt"].as<bool>();
     const auto logLevel = cmdArgs["log_level"].as<std::string>();
     const auto logDirArg = cmdArgs["log_dir"].as<std::string>();
+    const auto installDirArg = cmdArgs["install_dir"].as<std::string>();
+    const bool extract_msi_only = cmdArgs["extract_msi"].as<bool>();
+
     spdlog::level::level_enum severity = spdlog::level::off;
+
+    std::wstring installFolderProp;
+    if (!installDirArg.empty())
+    {
+        std::string installDir;
+        if (installDirArg.find(' ') != std::string::npos)
+        {
+            installDir = "\"" + installDirArg + "\"";
+        }
+        else
+        {
+            installDir = installDirArg;
+        }
+
+        installFolderProp = std::wstring(installDir.length(), L' ');
+        std::copy(installDir.begin(), installDir.end(), installFolderProp.begin());
+        installFolderProp = L"INSTALLFOLDER=" + installFolderProp;
+    }
 
     fs::path logDir = ".";
     try
@@ -145,8 +179,23 @@ int bootstrapper(HINSTANCE hInstance)
         severity = spdlog::level::err;
     }
     setup_log(logDir, severity);
-    spdlog::debug("PowerToys Bootstrapper is launched!\nnoFullUI: {}\nsilent: {}\nno_start_pt: {}\nskip_dotnet_install: {}\nlog_level: {}", noFullUI, silent, noStartPT, skipDotnetInstall, logLevel);
+    spdlog::debug("PowerToys Bootstrapper is launched!\nnoFullUI: {}\nsilent: {}\nno_start_pt: {}\nskip_dotnet_install: {}\nlog_level: {}\ninstall_dir: {}\nextract_msi: {}\n", noFullUI, silent, noStartPT, skipDotnetInstall, logLevel, installDirArg, extract_msi_only);
+    
+    // If a user requested an MSI -> extract it and exit
+    if (extract_msi_only)
+    {
+        if (const auto installerPath = extractEmbeddedInstaller(fs::current_path()))
+        {
+            spdlog::info("MSI installer was extracted to {}", installerPath->string());
+        }
+        else
+        {
+            spdlog::error("MSI installer couldn't be extracted");
+        }
+        return 0;
+    }
 
+    // Setup MSI UI visibility and restart as elevated if required
     if (!noFullUI)
     {
         MsiSetInternalUI(INSTALLUILEVEL_FULL, nullptr);
@@ -167,7 +216,17 @@ int bootstrapper(HINSTANCE hInstance)
             LPWSTR* argList = CommandLineToArgvW(GetCommandLineW(), &nCmdArgs);
             for (int i = 1; i < nCmdArgs; ++i)
             {
-                params += argList[i];
+                if (std::wstring_view{ argList[i] }.find(L' ') != std::wstring_view::npos)
+                {
+                    params += L'"';
+                    params += argList[i];
+                    params += L'"';
+                }
+                else
+                {
+                    params += argList[i];
+                }
+
                 if (i != nCmdArgs - 1)
                 {
                     params += L' ';
@@ -195,13 +254,12 @@ int bootstrapper(HINSTANCE hInstance)
         }
     }
 
-    // Try killing PowerToys and prevent future processes launch
+    // Try killing PowerToys and prevent future processes launch by acquiring app mutex
     for (auto& handle : getProcessHandlesByName(L"PowerToys.exe", PROCESS_TERMINATE))
     {
         TerminateProcess(handle.get(), 0);
     }
     auto powerToysMutex = createAppMutex(POWERTOYS_MSI_MUTEX_NAME);
-
     auto instanceMutex = createAppMutex(POWERTOYS_BOOTSTRAPPER_MUTEX_NAME);
     if (!instanceMutex)
     {
@@ -223,7 +281,7 @@ int bootstrapper(HINSTANCE hInstance)
     }
 
     spdlog::debug("Extracting embedded MSI installer");
-    const auto installerPath = extractEmbeddedInstaller();
+    const auto installerPath = extractEmbeddedInstaller(fs::temp_directory_path());
     if (!installerPath)
     {
         if (!silent)
@@ -268,7 +326,7 @@ int bootstrapper(HINSTANCE hInstance)
         {
             spdlog::debug("Detecting if dotnet is installed");
             const bool dotnetInstalled = updating::dotnet_is_installed();
-            spdlog::debug("Dotnet is installed: {}", dotnetInstalled);
+            spdlog::debug("Dotnet is already installed: {}", dotnetInstalled);
             if (!dotnetInstalled)
             {
                 bool installed_successfully = false;
@@ -306,8 +364,7 @@ int bootstrapper(HINSTANCE hInstance)
     // At this point, there's no reason to show progress bar window, since MSI installers have their own
     close_progressbar_window();
 
-    // Always skip dotnet install, because we should've installed it from here earlier
-    std::wstring msiProps = L"SKIPDOTNETINSTALL=1 ";
+    const std::wstring msiProps = installFolderProp;
     spdlog::debug("Launching MSI installation for new package {}", installerPath->string());
     const bool installationDone = MsiInstallProductW(installerPath->c_str(), msiProps.c_str()) == ERROR_SUCCESS;
     if (!installationDone)

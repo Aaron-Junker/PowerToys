@@ -2,7 +2,7 @@
 
 #include "FancyZonesDataTypes.h"
 
-#include <common/json.h>
+#include <common/utils/json.h>
 
 #include <string>
 #include <vector>
@@ -67,11 +67,9 @@ namespace JSONHelpers
     };
 
     json::JsonObject GetPersistFancyZonesJSON(const std::wstring& zonesSettingsFileName, const std::wstring& appZoneHistoryFileName);
-    void SaveFancyZonesData(const std::wstring& zonesSettingsFileName,
-                            const std::wstring& appZoneHistoryFileName,
-                            const TDeviceInfoMap& deviceInfoMap,
-                            const TCustomZoneSetsMap& customZoneSetsMap,
-                            const TAppZoneHistoryMap& appZoneHistoryMap);
+
+    void SaveZoneSettings(const std::wstring& zonesSettingsFileName, const TDeviceInfoMap& deviceInfoMap, const TCustomZoneSetsMap& customZoneSetsMap);
+    void SaveAppZoneHistory(const std::wstring& appZoneHistoryFileName, const TAppZoneHistoryMap& appZoneHistoryMap);
 
     TAppZoneHistoryMap ParseAppZoneHistory(const json::JsonObject& fancyZonesDataJSON);
     json::JsonArray SerializeAppZoneHistory(const TAppZoneHistoryMap& appZoneHistoryMap);

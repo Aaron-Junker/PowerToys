@@ -2,12 +2,14 @@
 #include "util.h"
 #include "Settings.h"
 
-#include <common/common.h>
-#include <common/dpi_aware.h>
+#include <common/display/dpi_aware.h>
+#include <common/utils/process_path.h>
+#include <common/utils/window.h>
 
 #include <array>
 #include <sstream>
 #include <complex>
+#include <wil/Resource.h>
 
 #include <fancyzones/lib/FancyZonesDataTypes.h>
 
@@ -18,6 +20,20 @@ namespace NonLocalizable
     const wchar_t PowerToysAppFZEditor[] = L"FANCYZONESEDITOR.EXE";
 }
 
+bool find_app_name_in_path(const std::wstring& where, const std::vector<std::wstring>& what)
+{
+    for (const auto& row : what)
+    {
+        const auto pos = where.rfind(row);
+        const auto last_slash = where.rfind('\\');
+        //Check that row occurs in where, and its last occurrence contains in itself the first character after the last backslash.
+        if (pos != std::wstring::npos && pos <= last_slash + 1 && pos + row.length() > last_slash)
+        {
+            return true;
+        }
+    }
+    return false;
+}
 namespace
 {
     bool IsZonableByProcessPath(const std::wstring& processPath, const std::vector<std::wstring>& excludedApps)
@@ -65,7 +81,7 @@ namespace FancyZonesUtils
             return defaultDeviceId;
         }
     }
-    
+
     std::optional<FancyZonesDataTypes::DeviceIdData> ParseDeviceId(const std::wstring& str)
     {
         FancyZonesDataTypes::DeviceIdData data;
@@ -93,7 +109,7 @@ namespace FancyZonesUtils
 
             data.deviceName += L"#" + temp;
         }
-        else if(std::getline(wss, temp, L'_') && !temp.empty())
+        else if (std::getline(wss, temp, L'_') && !temp.empty())
         {
             data.deviceName = temp;
         }
@@ -153,8 +169,37 @@ namespace FancyZonesUtils
 
         return data;
     }
-    
+
     typedef BOOL(WINAPI* GetDpiForMonitorInternalFunc)(HMONITOR, UINT, UINT*, UINT*);
+
+    std::wstring GetDisplayDeviceId(const std::wstring& device, std::unordered_map<std::wstring, DWORD>& displayDeviceIdxMap)
+    {
+        DISPLAY_DEVICE displayDevice{ .cb = sizeof(displayDevice) };
+        std::wstring deviceId;
+        while (EnumDisplayDevicesW(device.c_str(), displayDeviceIdxMap[device], &displayDevice, EDD_GET_DEVICE_INTERFACE_NAME))
+        {
+            ++displayDeviceIdxMap[device];
+
+            // Only take active monitors (presented as being "on" by the respective GDI view) and monitors that don't
+            // represent a pseudo device used to mirror application drawing.
+            if (WI_IsFlagSet(displayDevice.StateFlags, DISPLAY_DEVICE_ACTIVE) &&
+                WI_IsFlagClear(displayDevice.StateFlags, DISPLAY_DEVICE_MIRRORING_DRIVER))
+            {
+                deviceId = displayDevice.DeviceID;
+                break;
+            }
+        }
+
+        if (deviceId.empty())
+        {
+            deviceId = GetSystemMetrics(SM_REMOTESESSION) ?
+                           L"\\\\?\\DISPLAY#REMOTEDISPLAY#" :
+                           L"\\\\?\\DISPLAY#LOCALDISPLAY#";
+        }
+
+        return deviceId;
+    }
+
     UINT GetDpiForMonitor(HMONITOR monitor) noexcept
     {
         UINT dpi{};
@@ -582,36 +627,6 @@ namespace FancyZonesUtils
         return result;
     }
 
-    std::optional<std::wstring> GenerateMonitorId(MONITORINFOEX mi, HMONITOR monitor, const GUID& virtualDesktopId)
-    {
-        DISPLAY_DEVICE displayDevice = { sizeof(displayDevice) };
-        PCWSTR deviceId = nullptr;
-
-        bool validMonitor = true;
-        if (EnumDisplayDevices(mi.szDevice, 0, &displayDevice, 1))
-        {
-            if (displayDevice.DeviceID[0] != L'\0')
-            {
-                deviceId = displayDevice.DeviceID;
-            }
-        }
-
-        if (!deviceId)
-        {
-            deviceId = GetSystemMetrics(SM_REMOTESESSION) ?
-                           L"\\\\?\\DISPLAY#REMOTEDISPLAY#" :
-                           L"\\\\?\\DISPLAY#LOCALDISPLAY#";
-        }
-
-        wil::unique_cotaskmem_string vdId;
-        if (SUCCEEDED(StringFromCLSID(virtualDesktopId, &vdId)))
-        {
-            return GenerateUniqueId(monitor, deviceId, vdId.get());
-        }
-
-        return std::nullopt;
-    }
-
     size_t ChooseNextZoneByPosition(DWORD vkCode, RECT windowRect, const std::vector<RECT>& zoneRects) noexcept
     {
         using complex = std::complex<double>;
@@ -620,7 +635,7 @@ namespace FancyZonesUtils
         const double eccentricity = 2.0;
 
         auto rectCenter = [](RECT rect) {
-            return complex {
+            return complex{
                 0.5 * rect.left + 0.5 * rect.right,
                 0.5 * rect.top + 0.5 * rect.bottom
             };
@@ -734,4 +749,33 @@ namespace FancyZonesUtils
 
         return windowRect;
     }
+
+    bool IsProcessOfWindowElevated(HWND window)
+    {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(window, &pid);
+        if (!pid)
+        {
+            return false;
+        }
+
+        wil::unique_handle hProcess{ OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                                 FALSE,
+                                                 pid) };
+
+        wil::unique_handle token;
+        bool elevated = false;
+
+        if (OpenProcessToken(hProcess.get(), TOKEN_QUERY, &token))
+        {
+            TOKEN_ELEVATION elevation;
+            DWORD size;
+            if (GetTokenInformation(token.get(), TokenElevation, &elevation, sizeof(elevation), &size))
+            {
+                return elevation.TokenIsElevated != 0;
+            }
+        }
+        return false;
+    }
+
 }

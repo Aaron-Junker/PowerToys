@@ -2,12 +2,12 @@
 
 #include "notifications.h"
 
-#include <common/notifications.h>
+#include <common/notifications/notifications.h>
 
 #include "updating.h"
 
-#include "VersionHelper.h"
-#include "version.h"
+#include <common/version/helper.h>
+#include <common/version/version.h>
 
 namespace updating
 {
@@ -18,13 +18,13 @@ namespace updating
         {
             auto current_version_to_next_version = VersionHelper{ VERSION_MAJOR, VERSION_MINOR, VERSION_REVISION }.toWstring();
             current_version_to_next_version += L" -> ";
-            current_version_to_next_version += info.version_string;
+            current_version_to_next_version += info.version.toWstring();
             return current_version_to_next_version;
         }
 
         void show_unavailable(const notifications::strings& strings, std::wstring reason)
         {
-            remove_toasts(UPDATING_PROCESS_TOAST_TAG);
+            remove_toasts_by_tag(UPDATING_PROCESS_TOAST_TAG);
 
             toast_params toast_params{ UPDATING_PROCESS_TOAST_TAG, false };
             show_toast(std::move(reason), strings.TOAST_TITLE, std::move(toast_params));
@@ -32,7 +32,7 @@ namespace updating
 
         void show_available(const updating::new_version_download_info& info, const notifications::strings& strings)
         {
-            remove_toasts(UPDATING_PROCESS_TOAST_TAG);
+            remove_toasts_by_tag(UPDATING_PROCESS_TOAST_TAG);
 
             toast_params toast_params{ UPDATING_PROCESS_TOAST_TAG, false };
             std::wstring contents = strings.GITHUB_NEW_VERSION_AVAILABLE;
@@ -51,10 +51,10 @@ namespace updating
 
         void show_download_start(const updating::new_version_download_info& info, const notifications::strings& strings)
         {
-            remove_toasts(UPDATING_PROCESS_TOAST_TAG);
+            remove_toasts_by_tag(UPDATING_PROCESS_TOAST_TAG);
 
             progress_bar_params progress_bar_params;
-            std::wstring progress_title{ info.version_string };
+            std::wstring progress_title{ info.version.toWstring() };
             progress_title += L' ';
             progress_title += strings.DOWNLOAD_IN_PROGRESS;
 
@@ -70,7 +70,7 @@ namespace updating
 
         void show_visit_github(const updating::new_version_download_info& info, const notifications::strings& strings)
         {
-            remove_toasts(UPDATING_PROCESS_TOAST_TAG);
+            remove_toasts_by_tag(UPDATING_PROCESS_TOAST_TAG);
 
             toast_params toast_params{ UPDATING_PROCESS_TOAST_TAG, false };
             std::wstring contents = strings.GITHUB_NEW_VERSION_AVAILABLE_OFFER_VISIT;
@@ -86,7 +86,7 @@ namespace updating
 
         void show_install_error(const updating::new_version_download_info& info, const notifications::strings& strings)
         {
-            remove_toasts(UPDATING_PROCESS_TOAST_TAG);
+            remove_toasts_by_tag(UPDATING_PROCESS_TOAST_TAG);
 
             toast_params toast_params{ UPDATING_PROCESS_TOAST_TAG, false };
             std::wstring contents = strings.GITHUB_NEW_VERSION_DOWNLOAD_INSTALL_ERROR;
@@ -101,7 +101,7 @@ namespace updating
 
         void show_version_ready(const updating::new_version_download_info& info, const notifications::strings& strings)
         {
-            remove_toasts(UPDATING_PROCESS_TOAST_TAG);
+            remove_toasts_by_tag(UPDATING_PROCESS_TOAST_TAG);
 
             toast_params toast_params{ UPDATING_PROCESS_TOAST_TAG, false };
             std::wstring new_version_ready{ strings.GITHUB_NEW_VERSION_READY_TO_INSTALL };
@@ -125,7 +125,7 @@ namespace updating
 
         void show_uninstallation_error(const notifications::strings& strings)
         {
-            remove_toasts(UPDATING_PROCESS_TOAST_TAG);
+            remove_toasts_by_tag(UPDATING_PROCESS_TOAST_TAG);
 
             show_toast(strings.UNINSTALLATION_UNKNOWN_ERROR, strings.TOAST_TITLE);
         }
@@ -134,7 +134,7 @@ namespace updating
         {
             progress_bar_params progress_bar_params;
 
-            std::wstring progress_title{ info.version_string };
+            std::wstring progress_title{ info.version.toWstring() };
             progress_title += L' ';
             progress_title += progress < 1 ? strings.DOWNLOAD_IN_PROGRESS : strings.DOWNLOAD_COMPLETE;
             progress_bar_params.progress_title = progress_title;

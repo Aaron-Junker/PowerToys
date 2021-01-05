@@ -21,8 +21,7 @@
 #include <functional>
 #include <unordered_set>
 #include <ShObjIdl.h>
-
-#pragma comment(lib, "windowsapp")
+#include <optional>
 
 namespace winrt
 {
