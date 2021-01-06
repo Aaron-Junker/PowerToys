@@ -45,5 +45,6 @@ If we implement this we could close the issues:
 
 # 4 Stages of developing
 |Stage|Expetation|
+|---|---|
 |1|Developing the main feature|
 <!-- in work by Aaron -->
