@@ -1,6 +1,6 @@
 # **Priview pane - Adding previews with monaco**
 
-<img align="right" src="./images/Logo.png" />
+<img align="right" src="../images/Logo.png" />
 
 - **What is it:** Implementing [#1527](https://github.com/microsoft/PowerToys/issues/1527)
 - **Authors:** Aaron Junker ([@aaron-junker](https://github.com/aaron-junker)), Clint Rutkas ([@crutkas](https://github.com/crutkas))
